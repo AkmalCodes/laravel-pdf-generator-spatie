@@ -9,7 +9,7 @@ use App\Models\Inventory;
 
 class InventoryController extends Controller
 {
-    public function getInventoryData()
+        public function getInventoryData()
     {
         $result = [];
 
@@ -18,7 +18,6 @@ class InventoryController extends Controller
             ->pluck('Description')
             ->toArray();
 
-        // Initialize variables to track overall earliest and latest dates
         $overallEarliestDate = null;
         $overallLatestDate = null;
 
@@ -26,26 +25,21 @@ class InventoryController extends Controller
             // Fetch all items for the current description where SalesDate is not null
             $items = Inventory::where('Description', $description)
                 ->whereNotNull('SalesDate') // Only items that are sold
-                ->get(['InventoryCode', 'SalesAmount', 'CategoryCode', 'SalesDate', 'storecode']); // Include storecode
+                ->get(['InventoryCode', 'SalesAmount', 'CategoryCode', 'SalesDate', 'storecode', 'ClassCode', 'goldweight']); // Include goldweight column
 
             if ($items->isEmpty()) {
                 continue;
             }
 
-            // Count items sold by storecode
             $storeCounts = $this->countItemsByStorecode($items);
-
-            // Collect inventory codes, category code, total sales amount, number of items sold
             $inventoryCodes = $items->pluck('InventoryCode')->toArray();
             $categoryCode = $items->pluck('CategoryCode')->first();
             $salesAmount = $items->sum('SalesAmount');
+            $classCode = $items->pluck('ClassCode')->first();
             $itemsSoldCount = $items->count();
-
-            // Get earliest and latest sales dates for the current description
             $earliestDate = Carbon::parse($items->min('SalesDate'))->format('Y-m-d');
             $latestDate = Carbon::parse($items->max('SalesDate'))->format('Y-m-d');
 
-            // Update overall earliest and latest dates across all descriptions
             if (is_null($overallEarliestDate) || $earliestDate < $overallEarliestDate) {
                 $overallEarliestDate = $earliestDate;
             }
@@ -53,27 +47,64 @@ class InventoryController extends Controller
                 $overallLatestDate = $latestDate;
             }
 
+            // Filter the inventory codes
             $filteredInventoryCodes = $this->filterInventoryCode($inventoryCodes, $categoryCode);
+
+            // Categorize items by gold weight
+            $goldWeightCategories = $this->categorizeItemsByGoldWeight($items);
 
             // Add data to the result array
             $result[$description] = [
                 'inventory_codes' => $filteredInventoryCodes,
                 'category_code' => $categoryCode,
                 'sales_amount' => $salesAmount . " RM",
-                'items_sold_count' => $itemsSoldCount . " pcs",
+                'items_sold_count' => $itemsSoldCount . " items",
                 'earliest_date' => $earliestDate,
                 'latest_date' => $latestDate,
-                'store_counts' => $storeCounts, // Add store-specific counts
+                'store_counts' => $storeCounts,
+                'gold_weight_categories' => $goldWeightCategories,  // New field for gold weight categories
             ];
         }
 
-        // Return the result and the overall earliest and latest dates
         return [
             'data' => $result,
             'overallEarliestDate' => $overallEarliestDate,
             'overallLatestDate' => $overallLatestDate,
         ];
     }
+
+    public function categorizeItemsByGoldWeight($items)
+    {
+        // Initialize categories for different gold weight ranges
+        $categories = [
+            '0-5' => 0,
+            '5-10' => 0,
+            '10-15' => 0,
+            '15+' => 0,
+            '20+' => 0, // For items with no goldweight data
+        ];
+
+        foreach ($items as $item) {
+            $goldWeight = $item->goldweight;
+
+            if (is_null($goldWeight)) {
+                $categories['unknown']++; // If no goldweight, increment the unknown category
+            } elseif ($goldWeight <= 5 && $goldWeight > 0) {
+                $categories['0-5']++;
+            } elseif ($goldWeight <= 10 && $goldWeight > 5) {
+                $categories['5-10']++;
+            } elseif ($goldWeight <= 15 && $goldWeight > 10) {
+                $categories['10-15']++;
+            } elseif ($goldWeight <= 20 && $goldWeight > 15){
+                $categories['15+']++;
+            }elseif ($goldWeight <= 25 && $goldWeight > 20){
+                $categories['20+']++;
+            }
+        }
+
+        return $categories;
+    }
+
 
     public function countItemsByStorecode($items)
     {
