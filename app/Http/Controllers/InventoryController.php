@@ -81,108 +81,133 @@ class InventoryController extends Controller
     {
         $topSales = [];
 
-        foreach ($internalCodes as $code) {
-            $internalCode = trim($code['InternalCode']);
-            
-            // If this is the first time encountering this InternalCode, initialize its data
-            if (!isset($topSales[$internalCode])) {
-                // Retrieve all items for the given InternalCode from TblInventory
-                $totalItems = Inventory::where('InternalCode', $internalCode)->count();
-                
-                // Retrieve sold items for the given InternalCode where SalesDate is not null
-                $soldItems = Inventory::where('InternalCode', $internalCode)
-                                    ->whereNotNull('SalesDate')
-                                    ->count();
+        // Step 1: Fetch all the inventory data at once and use chunking for efficiency
+        $internalCodeArray = $internalCodes->pluck('InternalCode')->toArray();
+        $allInventory = $this->getInventory();
 
-                // Initialize the array to store total items, sold items, and quantity sold
-                $topSales[$internalCode] = [
+        // Step 2: Initialize an array to track totals for each combination of InternalCode and VendorCode
+        $inventorySummary = [];
+
+        // Step 3: Process the inventory data in chunks to avoid memory exhaustion
+        $allInventory->chunk(1000)->each(function ($chunk) use ($internalCodeArray, &$inventorySummary) {
+            foreach ($chunk as $item) {
+                $internalCode = trim($item->InternalCode);
+
+                // Skip items that don't match the internal codes we're interested in
+                if (!in_array($internalCode, $internalCodeArray)) {
+                    continue;
+                }
+
+                $vendorCode = trim($item->VendorCode);
+
+                // Initialize the entry if it doesn't exist in the summary
+                if (!isset($inventorySummary[$internalCode][$vendorCode])) {
+                    $inventorySummary[$internalCode][$vendorCode] = [
+                        'TotalItems' => 0,
+                        'SoldItems' => 0,
+                    ];
+                }
+
+                // Increment total item count
+                $inventorySummary[$internalCode][$vendorCode]['TotalItems']++;
+
+                // If the item has a SalesDate, increment the sold count
+                if ($item->SalesDate !== null) {
+                    $inventorySummary[$internalCode][$vendorCode]['SoldItems']++;
+                }
+            }
+        });
+
+        // Step 4: Convert the inventory summary into a flattened topSales array
+        foreach ($inventorySummary as $internalCode => $vendors) {
+            foreach ($vendors as $vendorCode => $summary) {
+                $availableItems = $summary['TotalItems'] - $summary['SoldItems'];
+
+                $topSales[] = [
                     'InternalCode' => $internalCode,
-                    'TotalItems' => $totalItems,
-                    'SoldItems' => $soldItems,
-                    // 'Qty' => 0,  // Initialize the quantity sold
+                    'VendorCode' => $vendorCode,
+                    'TotalItems' => $summary['TotalItems'],
+                    'SoldItems' => $summary['SoldItems'],
+                    'AvailableItems' => $availableItems,
                 ];
             }
-
-            // Add the quantity sold from the invoice details
-            // $topSales[$internalCode]['Qty'] += $qty;
         }
 
-        // Sort by quantity sold in descending order
-        usort($topSales, function($a, $b) {
+        // Step 5: Sort the topSales array by SoldItems in descending order
+        usort($topSales, function ($a, $b) {
             return $b['SoldItems'] <=> $a['SoldItems'];
         });
 
         return $topSales;
     }
 
- 
+
+
      // Main function to calculate top sales quantity by design code
      public function getTopSalesQtyByDesignCode()
-     {  
-         // Increase time limit for this process
-         set_time_limit(180); // 3 minutes
- 
-         // Step 1: Retrieve all data
-         $receipts = $this->getReceipts();
-         $salesInvoiceDetails = $this->getSalesInvoiceDetails();
-         $inventory = $this->getInventory();
- 
-         // Step 2: Filter receipts for 'SALES'
-         $filteredReceipts = $this->filterSalesReceipts($receipts);
- 
-         // Step 3: Match sales invoice details
-         $matchedDetails = $this->matchInvoiceDetails($filteredReceipts, $salesInvoiceDetails);
- 
-         // Step 4: Retrieve internal codes
-         $internalCodes = $this->getInternalCodes($matchedDetails, $inventory);
- 
-         // Step 5: Calculate top sales quantity by design code
-         $topSales = $this->calculateTopSales($internalCodes);
- 
-         return dd($topSales); // Display the results
-     }
+    {  
+        // Increase time limit for this process
+        set_time_limit(180); // 3 minutes
 
-     public function generatePdfReport()
-    {
-        // Fetch top sales data
-        $inventoryData = $this->getTopSalesQtyByDesignCode();
+        // Step 1: Retrieve all data
+        $receipts = $this->getReceipts();
+        $salesInvoiceDetails = $this->getSalesInvoiceDetails();
+        $inventory = $this->getInventory();
 
-        $reportGeneratedAtStart = $inventoryData[0]['SalesDate'] ?? Carbon::now()->startOfYear()->format('Y-m-d');
-        $reportGeneratedAtEnd = $inventoryData[count($inventoryData) - 1]['SalesDate'] ?? Carbon::now()->endOfYear()->format('Y-m-d');
-        $m9_logo = $this->generateImage(); // Assume this returns the image in base64
+        // Step 2: Filter receipts for 'SALES'
+        $filteredReceipts = $this->filterSalesReceipts($receipts);
 
-        $data = [
-            'inventoryData' => $inventoryData,
-            'report_generated_at_start' => $reportGeneratedAtStart,
-            'report_generated_at_end' => $reportGeneratedAtEnd,
-            'm9_logo' => $m9_logo,
-        ];
+        // Step 3: Match sales invoice details
+        $matchedDetails = $this->matchInvoiceDetails($filteredReceipts, $salesInvoiceDetails);
 
-        // Render the view to HTML
-        $html = view('pdf_report', $data)->render();
+        // Step 4: Retrieve internal codes
+        $internalCodes = $this->getInternalCodes($matchedDetails, $inventory);
 
-        // Use Browsershot to convert the HTML into a PDF
-        Browsershot::html($html)
-            ->format('A4')
-            ->setOption('no-sandbox', true)
-            ->save(storage_path('app/public/inventory_report.pdf'));
+        // Step 5: Calculate top sales quantity by design code
+        $topSales = $this->calculateTopSales($internalCodes);
 
-        return response()->download(storage_path('app/public/inventory_report.pdf'));
+        return $topSales; // Display the results
     }
+
+    //  public function generatePdfReport()
+    // {
+    //     // Fetch top sales data
+    //     $inventoryData = $this->getTopSalesQtyByDesignCode();
+
+    //     $reportGeneratedAtStart = $inventoryData[0]['SalesDate'] ?? Carbon::now()->startOfYear()->format('Y-m-d');
+    //     $reportGeneratedAtEnd = $inventoryData[count($inventoryData) - 1]['SalesDate'] ?? Carbon::now()->endOfYear()->format('Y-m-d');
+    //     $m9_logo = $this->generateImage(); // Assume this returns the image in base64
+
+    //     $data = [
+    //         'inventoryData' => $inventoryData,
+    //         'report_generated_at_start' => $reportGeneratedAtStart,
+    //         'report_generated_at_end' => $reportGeneratedAtEnd,
+    //         'm9_logo' => $m9_logo,
+    //     ];
+
+    //     // Render the view to HTML
+    //     $html = view('pdf_report', $data)->render();
+
+    //     // Use Browsershot to convert the HTML into a PDF
+    //     Browsershot::html($html)
+    //         ->format('A4')
+    //         ->setOption('no-sandbox', true)
+    //         ->save(storage_path('app/public/inventory_report.pdf'));
+
+    //     return response()->download(storage_path('app/public/inventory_report.pdf'));
+    // }
 
     // PDF Report Preview in HTML
     public function generatePdfReportPreview()
     {
         $inventoryData = $this->getTopSalesQtyByDesignCode();
 
-        $reportGeneratedAtStart = $inventoryData[0]['SalesDate'] ?? Carbon::now()->startOfYear()->format('Y-m-d');
-        $reportGeneratedAtEnd = $inventoryData[count($inventoryData) - 1]['SalesDate'] ?? Carbon::now()->endOfYear()->format('Y-m-d');
+        // $reportGeneratedAtStart = $inventoryData[0]['SalesDate'] ?? Carbon::now()->startOfYear()->format('Y-m-d');
+        // $reportGeneratedAtEnd = $inventoryData[count($inventoryData) - 1]['SalesDate'] ?? Carbon::now()->endOfYear()->format('Y-m-d');
         $m9_logo = $this->generateImage(); // Assume this returns the image in base64
 
         $data = [
             'inventoryData' => $inventoryData,
-            'report_generated_at_start' => $reportGeneratedAtStart,
-            'report_generated_at_end' => $reportGeneratedAtEnd,
             'm9_logo' => $m9_logo,
         ];
 
