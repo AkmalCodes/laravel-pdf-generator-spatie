@@ -57,10 +57,8 @@ class InventoryController extends Controller
     {
         // Step 1: Create a lookup map of InventoryCode to InternalCode for faster lookups
         $inventoryMap = $inventory->pluck('InternalCode', 'InventoryCode')->toArray();
-    
         // Step 2: Initialize the result collection
         $result = collect();
-    
         // Step 3: Chunk the salesInvoiceDetails collection and process each chunk(this is to reduce execution time and memory usage)
         $salesInvoiceDetails->chunk(1000)->each(function ($chunk) use ($inventoryMap, &$result) {
             foreach ($chunk as $detail) {
