@@ -2,16 +2,12 @@
 <html>
 
 <head>
-    <title>Inventory Report</title>
+    <title>Inventory Sales Report</title>
+    <!-- Bootstrap CSS v5.3.2 -->
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet"
+        integrity="sha384-T3c6CoIi6uLrA9TneNEoa7RxnatzjcDSCmG1MXxSR1GAsXEV/Dwwykc2MPK8M2HN" crossorigin="anonymous" />
+
     <style>
-        @page {
-            margin: 5 5 5 5; /* top, right, bottom, left */
-        }
-
-        *{
-            font-size: 0.9em;
-        }
-
         body {
             font-family: 'DejaVu Sans', sans-serif;
             font-size: 12px;
@@ -21,12 +17,6 @@
         table {
             width: 100%;
             border-collapse: collapse;
-        }
-
-        table,
-        th,
-        td {
-            border: 1px solid black;
         }
 
         th,
@@ -39,15 +29,9 @@
             background-color: #f2f2f2;
         }
 
-        .text-right {
-            text-align: right;
-        }
-
         .header {
             text-align: center;
             margin-bottom: 20px;
-            width: 100%;
-            border-bottom: 1px solid rgba(182, 177, 177, 0.568);
         }
 
         img{
@@ -63,78 +47,55 @@
             width: 100%;
         }
     </style>
-    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet"
-        integrity="sha384-T3c6CoIi6uLrA9TneNEoa7RxnatzjcDSCmG1MXxSR1GAsXEV/Dwwykc2MPK8M2HN" crossorigin="anonymous" />
 </head>
 
 <body>
-    <div class="header">
-        <div class="container d-flex flex-column align-items-center">
+    <div class="container">
+        <!-- Header Section -->
+        <div class="container d-flex flex-row align-items-center justify-content-between">
             <img class="img-logo" src="{{ $m9_logo }}" alt="Merchant9 Logo">
-            <div class="header-details">
-                <h1>Sales Report</h1>
-                <h4>Sale period: <strong>{{ $report_generated_at_start }}</strong> to
-                    <strong>{{ $report_generated_at_end }}</strong>
-                </h4>
-            </div>
+            <h1>Inventory Sales Report</h1>
+        </div>
+
+        <!-- Inventory Data Table -->
+        <div class="table-responsive">
+            <table class="table table-bordered">
+                <thead>
+                    <tr>
+                        <th><strong>No.</strong></strong></th>
+                        <th><strong>Design Code</strong></th>
+                        <th><strong>Vendor Code</strong></th>
+                        <th><strong>Total Items</strong></th>
+                        <th><strong>Items Sold</strong></th>
+                        <th><strong>Items Available</strong></th>
+                    </tr>
+                </thead>
+                <tbody>
+                    @foreach ($inventoryData as $index => $data)
+                    <tr>
+                        <td>{{ $index + 1 }}</td> <!-- Incrementing the row number -->
+                        <td>{{ $data['InternalCode'] }}</td> <!-- Display InternalCode -->
+                        <td>{{ $data['VendorCode'] }}</td> <!-- Display VendorCode -->
+                        <td>{{ $data['TotalItems'] }}</td> <!-- Display Total Items -->
+                        <td>{{ $data['SoldItems'] }}</td> <!-- Display Sold Items -->
+                        <td>{{ $data['AvailableItems'] }}</td> <!-- Display Available Items -->
+                    </tr>
+                    @endforeach
+                </tbody>
+        </table>
+        </table>
+            </table>
         </div>
     </div>
-    <div class="container">
-        <table class="table table-bordered">
-            <thead>
-                <tr>
-                    <th>Description</th>
-                    <th>Category Code</th>
-                    <th>Gold Weight Categories</th>
-                    <th>Total Sales Amount</th>
-                    <th>Items Sold</th>
-                </tr>
-            </thead>
-            @foreach ($inventoryData as $description => $data)
-                <tbody>
-                    <tr>
-                        <td>{{ $description }}</td>
-                        <td>{{ $data['category_code'] }}</td>
-                        <td>
-                            @php
-                            // Check if all gold weight categories are empty or zero
-                            $allEmpty = true;
-                            $categories = ['0-5', '5-10', '10-15', '15+', '20+'];
-                            
-                            // Check if any category has a non-zero value
-                            foreach ($categories as $category) {
-                                if (!empty($data['gold_weight_categories'][$category])) {
-                                    $allEmpty = false;
-                                    break;
-                                }
-                            }
-                            @endphp
-                            @if($allEmpty)
-                                <strong>Items calculated by individual product instead of gold weight.</strong>
-                            @else
-                                <div>0-5g: {{ $data['gold_weight_categories']['0-5'] ?? 0 }}</div>
-                                <div>5-10g: {{ $data['gold_weight_categories']['5-10'] ?? 0 }}</div>
-                                <div>10-15g: {{ $data['gold_weight_categories']['10-15'] ?? 0 }}</div>
-                                <div>15+g: {{ $data['gold_weight_categories']['15+'] ?? 0 }}</div>
-                                <div>20+g: {{ $data['gold_weight_categories']['20+'] ?? 0 }}</div>
-                            @endif
-                        </td>                        
-                        <td>{{ $data['sales_amount'] }}</td>
-                        <td>
-                            @foreach ($data['store_counts'] as $storecode => $count)
-                                <div class="container p-0">
-                                    <strong>{{ $storecode }}:</strong>  {{ $count }}
-                                </div>
-                            @endforeach
-                            <div class="container p-0">
-                                <strong>Total:</strong> {{ $data['items_sold_count'] }}
-                            </div>
-                        </td>
-                    </tr>
-                </tbody>
-            @endforeach
-        </table>
-    </div>
+
+    <!-- Bootstrap JS and Popper.js v5.3.2 -->
+    <script src="https://cdn.jsdelivr.net/npm/@popperjs/core@2.11.8/dist/umd/popper.min.js"
+        integrity="sha384-I7E8VVD/ismYTF4hNIPjVp/Zjvgyol6VFvRkX/vR+Vc4jQkC+hVqc2pM8ODewa9r" crossorigin="anonymous">
+    </script>
+
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.min.js"
+        integrity="sha384-BBtl+eGJRgqQAUMxJ7pMwbEyER4l1g+O15P+16Ep7Q9Q+zqX6gSbd85u4mG4QzX+" crossorigin="anonymous">
+    </script>
 </body>
 
 </html>
