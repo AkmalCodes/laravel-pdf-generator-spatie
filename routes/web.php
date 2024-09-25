@@ -9,7 +9,7 @@ Route::get('/', function () {
 });
 
 // Route to generate and download the PDF report
-Route::get('/inventory-report', [InventoryController::class, 'generatePdfReportPreview'])->name('inventory.generatePdfReportPreview');
+Route::get('/inventory-report', [InventoryController::class, 'generatePdfReport'])->name('inventory.generatePdfReport');
 
 // Route to preview the report in HTML before generating the PDF
 Route::get('/inventory-report/preview', [InventoryController::class, 'generatePdfReportPreview'])->name('inventory.report.preview');
